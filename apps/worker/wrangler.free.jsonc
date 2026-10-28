@@ -1,0 +1,69 @@
+{
+  // Telegram video downloader — FREE-plan profile ("hybrid").
+  //
+  //   Worker (this file)  Telegram webhook, bot UI, D1 state machine, Queue, cron sweeper. Runs on Cloudflare's Free plan.
+  //   Media engine        apps/media-container started on your own computer (`npm run engine`), reachable through a free
+  //                       Cloudflare Tunnel. It registers its URL with the Worker (POST /internal/engine/register).
+  //   Delivery            Telethon/MTProto from the engine: files up to ~2 GB, no Bot API 50 MB cap, no R2 needed.
+  //
+  // Not used here (they need the Workers Paid plan): Containers, Durable Object classes, R2 delivery links,
+  // `limits.cpu_ms`. Use wrangler.jsonc + `--paid` for the full Cloudflare-native profile.
+  // Resource IDs are filled in by `npm run provision`; never commit secrets here.
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "tvd-worker",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-25",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+
+  "observability": { "enabled": true, "head_sampling_rate": 1 },
+
+  // Every minute: reconcile running jobs with the engine, retry/expire jobs, drop stale rows.
+  "triggers": { "crons": ["* * * * *"] },
+
+  "vars": {
+    "LOG_LEVEL": "info",
+    "MEDIA_BACKEND": "http",
+    "MTPROTO_ENABLED": "true",
+    "TELEGRAM_DELIVERY_MODE": "auto",
+    "MAX_OUTPUT_BYTES": "1900000000",
+    "MAX_CONCURRENT_JOBS": "2",
+    "MAX_JOBS_PER_USER": "2",
+    "MAX_QUEUED_JOBS": "40",
+    "MAX_DURATION_SECONDS": "0",
+    "MAX_RETRIES": "3",
+    "DOWNLOAD_TIMEOUT": "3600",
+    "PROCESSING_TIMEOUT": "1800",
+    "UPLOAD_TIMEOUT": "3600",
+    "FILE_RETENTION_HOURS": "24",
+    "HISTORY_RETENTION_DAYS": "30",
+    "RATE_LIMIT_PER_MINUTE": "6",
+    "LOCAL_BOT_API_ENABLED": "false"
+    // PUBLIC_BASE_URL is set by scripts/deploy.mjs once the workers.dev URL is known (the engine posts its callbacks there).
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "tvd-db",
+      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  "queues": {
+    "producers": [{ "binding": "JOBS_QUEUE", "queue": "tvd-jobs" }],
+    "consumers": [
+      {
+        "queue": "tvd-jobs",
+        "max_batch_size": 1,
+        "max_batch_timeout": 2,
+        "max_retries": 6,
+        "dead_letter_queue": "tvd-jobs-dlq",
+        "max_concurrency": 5
+      },
+      // messages that exhausted every retry land here; the handler fails the job so the user is told
+      { "queue": "tvd-jobs-dlq", "max_batch_size": 10, "max_batch_timeout": 5, "max_retries": 2 }
+    ]
+  }
+}

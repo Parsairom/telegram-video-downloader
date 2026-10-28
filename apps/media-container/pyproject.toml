@@ -1,0 +1,48 @@
+[project]
+name = "tvd-media-container"
+version = "1.0.0"
+description = "Media engine for the Telegram video downloader: yt-dlp + FFmpeg behind a small job API."
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi==0.162.0",
+  "uvicorn==0.54.0",
+  "yt-dlp[default]==2026.10.21",
+  "httpx[socks]==0.28.1",
+  "pydantic==2.14.1",
+  "Pillow>=11.0",
+  "telethon==1.45.0",
+  "python-socks[asyncio]==3.1.1",
+  "cryptg==0.6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest==9.1.1",
+  "pytest-asyncio==1.4.0",
+  "python-multipart>=0.0.20",
+  "ruff==0.17.2",
+]
+
+[tool.setuptools]
+packages = ["app"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+  "needs_ffmpeg: requires ffmpeg and ffprobe on PATH",
+  "network: requires outbound internet access",
+]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S"]
+# asserts in tests; subprocess always gets argument lists; long lines are tolerated
+ignore = ["S101", "S603", "S607", "E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S104", "S105", "S106"]  # fixture tokens and loopback binds are test data

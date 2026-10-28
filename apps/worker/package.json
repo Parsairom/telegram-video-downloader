@@ -1,0 +1,25 @@
+{
+  "name": "@tvd/worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "typegen": "wrangler types",
+    "typecheck": "wrangler types && tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@cloudflare/containers": "^0.3.7",
+    "@tvd/shared-types": "*",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.4.7",
+    "@types/node": "^22.20.5",
+    "vitest": "~4.1.12",
+    "wrangler": "^4.152.0"
+  }
+}

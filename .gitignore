@@ -1,0 +1,26 @@
+node_modules/
+.wrangler/
+dist/
+.env
+.dev.vars
+*.log
+worker-configuration.d.ts
+
+# Python (media container)
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Local test artifacts
+/tmp/
+/test-output/
+
+# Local wrangler configs written by `npm run provision` (contain your resource ids)
+apps/worker/wrangler.local.jsonc
+apps/worker/wrangler.free.local.jsonc
+
+# Free profile: local engine runtime
+/tools/
+/engine-work/

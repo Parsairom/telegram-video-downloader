@@ -1,0 +1,93 @@
+{
+  // Telegram video downloader — Worker control plane + Containers media engine.
+  // Resource IDs are filled in by `npm run provision` (scripts/provision.mjs); never commit secrets here.
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "tvd-worker",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-25",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+
+  "observability": { "enabled": true, "head_sampling_rate": 1 },
+
+  // Every minute: reconcile running jobs with their containers (also keeps them awake), retry/expire jobs, clean up R2.
+  "triggers": { "crons": ["* * * * *"] },
+
+  "limits": { "cpu_ms": 30000 },
+
+  "vars": {
+    "LOG_LEVEL": "info",
+    "TELEGRAM_DELIVERY_MODE": "auto",
+    "MAX_OUTPUT_BYTES": "1900000000",
+    "MAX_CONCURRENT_JOBS": "3",
+    "MAX_JOBS_PER_USER": "2",
+    "MAX_QUEUED_JOBS": "40",
+    "MAX_DURATION_SECONDS": "0",
+    "MAX_RETRIES": "3",
+    "DOWNLOAD_TIMEOUT": "3600",
+    "PROCESSING_TIMEOUT": "1800",
+    "UPLOAD_TIMEOUT": "3600",
+    "MAX_TEMP_BYTES": "14000000000",
+    "FILE_RETENTION_HOURS": "24",
+    "HISTORY_RETENTION_DAYS": "30",
+    "RATE_LIMIT_PER_MINUTE": "6",
+    "TEMP_DIRECTORY": "/work",
+    "LOCAL_BOT_API_ENABLED": "false",
+    "INSPECTOR_POOL_SIZE": "2"
+    // PUBLIC_BASE_URL is set by scripts/deploy.mjs once the workers.dev URL is known.
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "tvd-db",
+      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  "r2_buckets": [{ "binding": "MEDIA_BUCKET", "bucket_name": "tvd-media" }],
+
+  "queues": {
+    "producers": [{ "binding": "JOBS_QUEUE", "queue": "tvd-jobs" }],
+    "consumers": [
+      {
+        "queue": "tvd-jobs",
+        "max_batch_size": 1,
+        "max_batch_timeout": 2,
+        "max_retries": 6,
+        "dead_letter_queue": "tvd-jobs-dlq",
+        "max_concurrency": 5
+      },
+      // messages that exhausted every retry land here; the handler fails the job so the user is told
+      { "queue": "tvd-jobs-dlq", "max_batch_size": 10, "max_batch_timeout": 5, "max_retries": 2 }
+    ]
+  },
+
+  "durable_objects": {
+    "bindings": [
+      { "name": "MEDIA_JOB", "class_name": "MediaJob" },
+      { "name": "MEDIA_INSPECTOR", "class_name": "MediaInspector" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["MediaJob", "MediaInspector"] }],
+
+  // Both classes run the same image. MediaInspector (inspect + frame previews) never receives the bot token;
+  // MediaJob (one instance per download job) does, because it uploads to Telegram.
+  "containers": [
+    {
+      "class_name": "MediaJob",
+      "image": "../media-container/Dockerfile",
+      "image_build_context": "../media-container",
+      "instance_type": "standard-3",
+      "max_instances": 4
+    },
+    {
+      "class_name": "MediaInspector",
+      "image": "../media-container/Dockerfile",
+      "image_build_context": "../media-container",
+      "instance_type": "standard-1",
+      "max_instances": 2
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "name": "telegram-video-downloader",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Telegram video downloader: Cloudflare Worker control plane (Queues, D1) with a yt-dlp + FFmpeg media engine - on Cloudflare Containers (paid) or on your own computer behind a free tunnel (free) - and MTProto delivery up to 2 GB.",
+  "workspaces": [
+    "apps/worker",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "typecheck": "npm run typecheck -w @tvd/worker",
+    "lint": "eslint apps/worker/src apps/worker/test packages scripts",
+    "test": "npm run test -w @tvd/worker",
+    "test:container": "python -m pytest apps/media-container/tests -q",
+    "test:all": "npm run typecheck && npm run lint && npm test && npm run test:container",
+    "dev": "npm run dev -w @tvd/worker",
+    "provision": "node scripts/provision.mjs",
+    "secrets": "node scripts/set-secrets.mjs",
+    "deploy": "node scripts/deploy.mjs",
+    "deploy:worker": "node scripts/deploy.mjs --worker-only",
+    "webhook": "node scripts/set-webhook.mjs",
+    "webhook:delete": "node scripts/set-webhook.mjs --delete",
+    "engine": "node scripts/run-engine.mjs",
+    "admin:discover": "node scripts/discover-admin.mjs",
+    "lock:container": "node scripts/lock-deps.mjs",
+    "audit:deps": "npm audit --omit=dev"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.13.0",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.0"
+  }
+}
