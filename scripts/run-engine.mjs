@@ -13,8 +13,10 @@
 // Reads .env (see .env.example). Secrets are passed to the engine's environment only, never on a command line or to the log.
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import net from "node:net";
 import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
+import { URL } from "node:url";
 import { ROOT, fail, readEnvFile, redact, requireEnv, step } from "./lib.mjs";
 
 const args = new Set(process.argv.slice(2));
@@ -134,7 +136,14 @@ function startTunnel() {
   children.add(child);
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error("the tunnel did not report a public URL within 90 s")), 90_000);
+    let expired = 0;
     pipeLogs(child, "tunnel", (line) => {
+      // A quick tunnel that could not connect for a few minutes is deleted by Cloudflare; retrying it forever never works,
+      // so end this cloudflared process and let the main loop request a fresh tunnel (and register the new URL).
+      if (/Unauthorized: Tunnel not found/i.test(line) && ++expired >= 2) {
+        console.log("  ! Cloudflare no longer knows this quick tunnel (it expired before it could connect) — requesting a new one");
+        killTree(child);
+      }
       // api.trycloudflare.com is the control API that shows up in error lines, never the tunnel itself
       const m = /https:\/\/(?!api\.)[a-z0-9-]+\.trycloudflare\.com/i.exec(line);
       if (m) {
@@ -191,11 +200,40 @@ function shutdown(signal) {
 process.on("SIGINT", () => shutdown("SIGINT"));
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 
+// ── pre-flight ─────────────────────────────────────────────────────────────────────────────────────────────────────────
+/** True when something accepts TCP connections at the proxy's host:port. */
+function proxyReachable(raw) {
+  let target;
+  try {
+    target = new URL(raw);
+  } catch {
+    return Promise.resolve(false);
+  }
+  const port = Number(target.port) || (target.protocol.startsWith("socks") ? 1080 : 80);
+  return new Promise((resolve) => {
+    const socket = net.connect({ host: target.hostname, port });
+    socket.setTimeout(3000);
+    socket.once("connect", () => (socket.destroy(), resolve(true)));
+    socket.once("timeout", () => (socket.destroy(), resolve(false)));
+    socket.once("error", () => resolve(false));
+  });
+}
+
+/** A dead proxy is the most common reason for downloads and Telegram uploads failing, so say so before anything else does. */
+async function warnAboutProxies() {
+  for (const key of ["TELEGRAM_PROXY", "UPSTREAM_PROXY"]) {
+    if (env[key] && !(await proxyReachable(env[key]))) {
+      console.log(`  ! ${key}=${env[key]} does not answer. Start your proxy/VPN app, or fix the port in .env — downloads from blocked sites and Telegram uploads fail until it does.`);
+    }
+  }
+}
+
 // ── main loop ───────────────────────────────────────────────────────────────────────────────────────────────────────────
 console.log(`Media engine for the free profile. Work dir: ${WORK_DIR}`);
 let failures = 0;
 while (!stopping) {
   let tunnel = null;
+  await warnAboutProxies();
   try {
     let publicUrl = env.ENGINE_PUBLIC_URL?.replace(/\/+$/, "");
     if (!args.has("--no-tunnel")) {

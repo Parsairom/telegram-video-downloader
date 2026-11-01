@@ -16,6 +16,10 @@ npm run engine            # tunnel + media engine on this computer; leave it run
 * **Bot says the engine is offline** → the engine window is closed/asleep, the computer lost its connection, or the heartbeat is older than 120 s. Restart `npm run engine`.
 * **Tunnel keeps failing** → `TUNNEL_PROTOCOL=http2` in `.env` (some networks block QUIC/UDP 7844); the `precheck … fail` lines cloudflared prints are advisory when a
   `Registered tunnel connection` line follows.
+* **Tunnel never connects (`TLS handshake with edge error: i/o timeout` or `EOF`, endless `Retrying connection`)** → the network blocks the tunnel's connection to Cloudflare (port 7844).
+  `cloudflared` ignores proxy environment variables, so it has to be forced through your proxy by a system-level proxifier (for example a Proxifier rule for `cloudflared.exe` → your SOCKS5 proxy).
+  If the proxy is an **xray/v2ray client with traffic sniffing on** (`destOverride` tls), also turn sniffing off or set it to *route only*: the tunnel's TLS server names
+  (`h2.cftunnel.com`, `quic.cftunnel.com`) have no DNS records, so a sniffed name replaces the destination address and the remote proxy server drops the connection (the symptom is the `EOF`).
 * **Port already in use** → change `ENGINE_PORT` (default 18080).
 * **Telegram or the source site is blocked on this network** → set `TELEGRAM_PROXY` / `UPSTREAM_PROXY` (SOCKS5 `socks5h://host:port` or HTTP) in `.env`; see the caveat in [`security.md`](security.md).
 * **Large file fails with a `telegram_error` mentioning the user/peer** → that user has never messaged the bot while the engine was running: ask them to send any message, then retry.
